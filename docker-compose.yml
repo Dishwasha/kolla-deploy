@@ -1,0 +1,103 @@
+version: '2'
+networks:
+  vlan100:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 10.0.0.0/24
+        gateway: 10.0.0.1
+services:
+  apt-cacher-ng:
+    restart: always
+    image: sameersbn/apt-cacher-ng:latest
+    networks:
+      vlan100:
+        ipv4_address: 10.0.0.5
+    ports:
+      - 3142:3142
+    volumes:
+      - ./docker-apt-cacher-ng/cache:/var/cache/apt-cacher-ng
+  cobbler:
+    build: ./docker-cobbler
+    container_name: cobbler
+    networks:
+      vlan100:
+        ipv4_address: 10.0.0.2
+    ports:
+      - 69:69
+      - 80:80
+      - 443:443
+      - 25151:25151
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - ./docker-cobbler/dist/centos:/mnt
+      - ./docker-cobbler/etc/cobbler/settings:/etc/cobbler/settings
+      - ./docker-cobbler/etc/cobbler/dhcp.template:/etc/cobbler/dhcp.template
+      - ./docker-cobbler/var/www/cobbler/images:/var/www/cobbler/images
+      - ./docker-cobbler/var/www/cobbler/ks_mirror:/var/www/cobbler/ks_mirror
+      - ./docker-cobbler/var/www/cobbler/links:/var/www/cobbler/links
+      - ./docker-cobbler/var/lib/cobbler/config:/var/lib/cobbler/config
+      - ./docker-cobbler/var/lib/tftpboot:/var/lib/tftpboot
+  kolla:
+    build:
+      context: .
+    container_name: kolla
+    depends_on:
+      - apt-cacher-ng
+      - cobbler
+      - ntpd
+      - registry
+    entrypoint: ./entrypoint.sh
+    networks:
+      vlan100:
+        ipv4_address: 10.0.0.3
+    volumes:
+      - ./entrypoint.sh:/kolla/entrypoint.sh
+      - ./kolla:/kolla
+      - ./etc/kolla:/etc/kolla
+      - /var/run/docker.sock:/run/docker.sock
+      - /usr/bin/docker:/bin/docker
+    working_dir: /kolla
+  ntpd:
+    build: ./ntpd
+    image: ntpd/ntpd:latest
+    container_name: ntpd
+    hostname: ntpd
+    restart: on-failure:2
+    cap_add:
+      - SYS_TIME
+      - SYS_NICE
+    mem_limit: 64M
+    networks:
+      vlan100:
+        ipv4_address: 10.0.0.6
+    volumes:
+      - ./ntpd/docker/ntpd.conf:/etc/ntpd.conf:ro
+    tmpfs:
+      - /var/run:rw,noexec,nosuid,size=1m
+      - /var/db:rw,noexec,nosuid,size=8m
+      - /app/s6/.s6-svscan:rw,noexec,nosuid,size=1m
+      - /app/s6/ntpd/event:rw,noexec,nosuid,size=1m
+      - /app/s6/ntpd/supervise:rw,noexec,nosuid,size=1m
+    read_only: true
+    ports:
+      - "123/udp:123/udp"
+    environment:       
+      Author: "Kim Goh"
+  registry:
+    container_name: registry
+    restart: always
+    image: registry:2
+    networks:
+      vlan100:
+        ipv4_address: 10.0.0.4
+    ports:
+      - 5000:5000
+    environment:
+      REGISTRY_HTTP_TLS_CERTIFICATE: /certs/domain.crt
+      REGISTRY_HTTP_TLS_KEY: /certs/domain.key
+    volumes:
+      - ./certs/data:/var/lib/registry
+      - ./certs:/certs

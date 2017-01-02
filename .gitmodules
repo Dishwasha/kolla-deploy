@@ -1,0 +1,12 @@
+[submodule "docker-apt-cacher-ng"]
+	path = docker-apt-cacher-ng
+	url = https://github.com/sameersbn/docker-apt-cacher-ng.git
+[submodule "docker-cobbler"]
+	path = docker-cobbler
+	url = https://github.com/ContainerSolutions/docker-cobbler.git
+[submodule "ntpd"]
+	path = ntpd
+	url = https://github.com/lcnja/ntpd.git
+[submodule "kolla"]
+	path = kolla
+	url = https://github.com/Dishwasha/kolla.git

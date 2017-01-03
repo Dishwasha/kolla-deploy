@@ -2,6 +2,8 @@ version: '2'
 networks:
   vlan100:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: "virbr100"
     ipam:
       driver: default
       config:
@@ -9,6 +11,7 @@ networks:
         gateway: 10.0.0.1
 services:
   apt-cacher-ng:
+    container_name: apt-cacher-ng
     restart: always
     image: sameersbn/apt-cacher-ng:latest
     networks:
@@ -21,24 +24,28 @@ services:
   cobbler:
     build: ./docker-cobbler
     container_name: cobbler
-    networks:
-      vlan100:
-        ipv4_address: 10.0.0.2
     ports:
-      - 69:69
+      - 67/udp:67/udp
+      - 69/udp:69/udp
       - 80:80
       - 443:443
       - 25151:25151
+    networks:
+      vlan100:
+        ipv4_address: 10.0.0.2
     privileged: true
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
       - ./docker-cobbler/dist/centos:/mnt
       - ./docker-cobbler/etc/cobbler/settings:/etc/cobbler/settings
       - ./docker-cobbler/etc/cobbler/dhcp.template:/etc/cobbler/dhcp.template
+      - ./docker-cobbler/etc/dhcp/dhcpd.conf:/etc/dhcp/dhcpd.conf
       - ./docker-cobbler/var/www/cobbler/images:/var/www/cobbler/images
       - ./docker-cobbler/var/www/cobbler/ks_mirror:/var/www/cobbler/ks_mirror
       - ./docker-cobbler/var/www/cobbler/links:/var/www/cobbler/links
       - ./docker-cobbler/var/lib/cobbler/config:/var/lib/cobbler/config
+      - ./docker-cobbler/var/lib/cobbler/kickstarts:/var/lib/cobbler/kickstarts
+      - ./docker-cobbler/var/lib/cobbler/snippets:/var/lib/cobbler/snippets
       - ./docker-cobbler/var/lib/tftpboot:/var/lib/tftpboot
   kolla:
     build:
@@ -49,16 +56,17 @@ services:
       - cobbler
       - ntpd
       - registry
-    entrypoint: ./entrypoint.sh
+    entrypoint: /bin/bash
+    #entrypoint: ./entrypoint.sh
     networks:
       vlan100:
-        ipv4_address: 10.0.0.3
     volumes:
       - ./entrypoint.sh:/kolla/entrypoint.sh
       - ./kolla:/kolla
       - ./etc/kolla:/etc/kolla
       - /var/run/docker.sock:/run/docker.sock
       - /usr/bin/docker:/bin/docker
+      - /etc/hosts:/etc/hosts:ro
     working_dir: /kolla
   ntpd:
     build: ./ntpd
@@ -101,3 +109,4 @@ services:
     volumes:
       - ./certs/data:/var/lib/registry
       - ./certs:/certs
+      - ./config.yml:/etc/docker/registry/config.yml
